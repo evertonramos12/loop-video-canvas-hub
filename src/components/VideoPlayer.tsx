@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, VideoType } from '@/types';
-import { Fullscreen, Play, Pause } from 'lucide-react';
+import { Fullscreen, Play, Pause, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { extractYoutubeId } from '@/services/videoService';
 
@@ -64,7 +64,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     if (videos.length > 0 && currentIndex >= videos.length) {
       setCurrentIndex(0);
     }
-  }, [videos, currentIndex]);
+    
+    // Start playing from the beginning when videos are loaded
+    if (videos.length > 0 && autoPlay) {
+      setCurrentIndex(0);
+      setIsPlaying(true);
+    }
+  }, [videos, currentIndex, autoPlay]);
 
   const toggleFullscreen = () => {
     if (!playerContainerRef.current) return;
@@ -150,6 +156,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
             className="text-white hover:bg-white/20"
           >
             {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToNextVideo}
+            className="text-white hover:bg-white/20"
+            title="Next video"
+          >
+            <SkipForward size={20} />
           </Button>
           <span className="text-white text-sm">
             {currentVideo.title} ({currentIndex + 1}/{videos.length})
