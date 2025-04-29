@@ -19,16 +19,22 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   
   const currentVideo = videos[currentIndex];
 
+  // Function to advance to the next video
+  const goToNextVideo = () => {
+    setCurrentIndex((prevIndex) => (prevIndex + 1) % videos.length);
+  };
+
   useEffect(() => {
     if (videos.length === 0) return;
 
     let timer: NodeJS.Timeout;
     
+    // Handle video end and advance to next video
     const handleVideoEnd = () => {
       if (isPlaying) {
         // Move to next video when current one ends
         timer = setTimeout(() => {
-          setCurrentIndex((prevIndex) => (prevIndex + 1) % videos.length);
+          goToNextVideo();
         }, 500); // Small delay before switching
       }
     };
@@ -102,7 +108,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       const videoId = extractYoutubeId(currentVideo.url);
       if (!videoId) return <div>Invalid YouTube URL</div>;
       
-      // YouTube embed with autoplay and controls
+      // YouTube embed with autoplay, controls, and enablejsapi for event handling
       return (
         <iframe
           src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0`}
