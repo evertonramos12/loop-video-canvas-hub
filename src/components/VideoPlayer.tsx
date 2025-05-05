@@ -21,7 +21,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
 
   // Function to advance to the next video
   const goToNextVideo = () => {
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % videos.length);
+    if (videos.length <= 1) return;
+    
+    // If we're at the end of the playlist, loop back to the beginning
+    if (currentIndex >= videos.length - 1) {
+      setCurrentIndex(0);
+    } else {
+      setCurrentIndex(currentIndex + 1);
+    }
   };
 
   useEffect(() => {
@@ -32,6 +39,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     // Handle video end and advance to next video
     const handleVideoEnd = () => {
       if (isPlaying) {
+        console.log("Video ended, advancing to next video");
         // Move to next video when current one ends
         timer = setTimeout(() => {
           goToNextVideo();
@@ -47,6 +55,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
         event.data.event === 'onStateChange' &&
         event.data.info === 0 // Video ended (state=0)
       ) {
+        console.log("YouTube video ended event detected");
         handleVideoEnd();
       }
     };
@@ -117,7 +126,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       // YouTube embed with autoplay, controls, and enablejsapi for event handling
       return (
         <iframe
-          src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0`}
+          src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           className="w-full h-full absolute top-0 left-0"
