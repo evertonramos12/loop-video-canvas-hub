@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, VideoType } from '@/types';
-import { Fullscreen, Play, Pause, SkipForward } from 'lucide-react';
+import { Fullscreen, Play, Pause, SkipForward, SkipBack, Repeat, RepeatOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { extractYoutubeId } from '@/services/videoService';
 
@@ -13,18 +13,43 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [loopEnabled, setLoopEnabled] = useState(true);
   const playerRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   
   const currentVideo = videos[currentIndex];
 
+  // Function to go to previous video
+  const goToPreviousVideo = () => {
+    if (videos.length <= 1) return;
+    
+    setCurrentIndex((prevIndex) => {
+      const newIndex = prevIndex <= 0 ? videos.length - 1 : prevIndex - 1;
+      console.log(`Moving to previous video: ${newIndex + 1}/${videos.length}`);
+      return newIndex;
+    });
+  };
+
   // Function to advance to the next video
   const goToNextVideo = () => {
     if (videos.length <= 1) return;
     
-    // Always loop back to beginning when we reach the end
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % videos.length);
-    console.log(`Moving to next video: ${(currentIndex + 1) % videos.length + 1}/${videos.length}`);
+    setCurrentIndex((prevIndex) => {
+      // If looping is disabled and we're at the end, don't advance
+      if (!loopEnabled && prevIndex >= videos.length - 1) {
+        return prevIndex;
+      }
+      // Otherwise, loop back to beginning when we reach the end
+      const newIndex = (prevIndex + 1) % videos.length;
+      console.log(`Moving to next video: ${newIndex + 1}/${videos.length}`);
+      return newIndex;
+    });
+  };
+
+  // Toggle looping on/off
+  const toggleLooping = () => {
+    setLoopEnabled(!loopEnabled);
+    console.log(`Looping ${!loopEnabled ? 'enabled' : 'disabled'}`);
   };
 
   useEffect(() => {
@@ -38,6 +63,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
         console.log("Video ended, advancing to next video");
         // Move to next video when current one ends
         timer = setTimeout(() => {
+          // If we're at the last video and looping is disabled, don't advance
+          if (!loopEnabled && currentIndex >= videos.length - 1) {
+            console.log("Reached end of playlist and looping is disabled");
+            return;
+          }
           goToNextVideo();
         }, 500); // Small delay before switching
       }
@@ -45,14 +75,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
 
     // Subscribe to message events from YouTube iframe API
     const handleMessage = (event: MessageEvent) => {
-      // Handle YouTube iframe API events
-      if (
-        typeof event.data === 'object' &&
-        event.data.event === 'onStateChange' &&
-        event.data.info === 0 // Video ended (state=0)
-      ) {
-        console.log("YouTube video ended event detected");
-        handleVideoEnd();
+      try {
+        // Handle YouTube iframe API events
+        if (
+          typeof event.data === 'object' &&
+          event.data.event === 'onStateChange'
+        ) {
+          // Video ended (state=0)
+          if (event.data.info === 0) {
+            console.log("YouTube video ended event detected");
+            handleVideoEnd();
+          }
+          // Video error (state=-1)
+          if (event.data.info === -1) {
+            console.log("YouTube video error detected, skipping to next");
+            goToNextVideo();
+          }
+        }
+      } catch (error) {
+        console.error("Error handling YouTube message:", error);
       }
     };
 
@@ -62,7 +103,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       clearTimeout(timer);
       window.removeEventListener('message', handleMessage);
     };
-  }, [currentIndex, videos, isPlaying]);
+  }, [currentIndex, videos, isPlaying, loopEnabled]);
 
   useEffect(() => {
     // Reset current index when videos change
@@ -80,25 +121,46 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   const toggleFullscreen = () => {
     if (!playerContainerRef.current) return;
 
-    if (!isFullscreen) {
-      if (playerContainerRef.current.requestFullscreen) {
-        playerContainerRef.current.requestFullscreen();
+    try {
+      if (!isFullscreen) {
+        if (playerContainerRef.current.requestFullscreen) {
+          playerContainerRef.current.requestFullscreen();
+        } else if ((playerContainerRef.current as any).webkitRequestFullscreen) {
+          (playerContainerRef.current as any).webkitRequestFullscreen();
+        } else if ((playerContainerRef.current as any).msRequestFullscreen) {
+          (playerContainerRef.current as any).msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        } else if ((document as any).msExitFullscreen) {
+          (document as any).msExitFullscreen();
+        }
       }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
+    } catch (error) {
+      console.error("Fullscreen error:", error);
     }
   };
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      setIsFullscreen(
+        !!document.fullscreenElement || 
+        !!(document as any).webkitFullscreenElement || 
+        !!(document as any).msFullscreenElement
+      );
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+    
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
     };
   }, []);
 
@@ -119,10 +181,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       const videoId = extractYoutubeId(currentVideo.url);
       if (!videoId) return <div>Invalid YouTube URL</div>;
       
-      // YouTube embed with autoplay, controls, and enablejsapi for event handling
+      // YouTube embed with parameters optimized for compatibility
+      // Using controls=0 as requested but can be set to 1 for more compatibility
       return (
         <iframe
-          src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0&playlist=${videoId}`}
+          src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0&controls=0&playsinline=1&playlist=${videoId}`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           className="w-full h-full absolute top-0 left-0"
@@ -148,6 +211,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       <div 
         ref={playerRef}
         className={`video-container ${isFullscreen ? 'fullscreen' : ''}`}
+        style={{position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden'}}
       >
         {renderVideo()}
       </div>
@@ -165,11 +229,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
           <Button
             variant="ghost"
             size="icon"
+            onClick={goToPreviousVideo}
+            className="text-white hover:bg-white/20"
+            title="Previous video"
+          >
+            <SkipBack size={20} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={goToNextVideo}
             className="text-white hover:bg-white/20"
             title="Next video"
           >
             <SkipForward size={20} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleLooping}
+            className="text-white hover:bg-white/20"
+            title={loopEnabled ? "Disable looping" : "Enable looping"}
+          >
+            {loopEnabled ? <Repeat size={20} /> : <RepeatOff size={20} />}
           </Button>
           <span className="text-white text-sm">
             {currentVideo.title} ({currentIndex + 1}/{videos.length})
