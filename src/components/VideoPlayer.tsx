@@ -15,10 +15,39 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loopEnabled, setLoopEnabled] = useState(true);
+  const [inLandscape, setInLandscape] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   
   const currentVideo = videos[currentIndex];
+
+  // Check and handle orientation changes
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      const isLandscape = window.orientation === 90 || window.orientation === -90;
+      setInLandscape(isLandscape);
+      
+      // Auto enter fullscreen in landscape mode on mobile devices
+      if (isLandscape && !isFullscreen && isMobileDevice()) {
+        enterFullscreen();
+      }
+    };
+    
+    // Check if device is mobile
+    const isMobileDevice = () => {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    };
+    
+    window.addEventListener('orientationchange', handleOrientationChange);
+    // Check initial orientation
+    if (window.orientation !== undefined) {
+      handleOrientationChange();
+    }
+    
+    return () => {
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
+  }, [isFullscreen]);
 
   // Function to go to previous video
   const goToPreviousVideo = () => {
@@ -53,6 +82,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     console.log(`Looping ${!loopEnabled ? 'enabled' : 'disabled'}`);
   };
 
+  // Enhanced auto-play feature 
   useEffect(() => {
     if (videos.length === 0) return;
 
@@ -60,18 +90,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     
     // Handle video end and advance to next video
     const handleVideoEnd = () => {
-      if (isPlaying) {
-        console.log("Video ended, advancing to next video");
-        // Move to next video when current one ends
-        timer = setTimeout(() => {
-          // If we're at the last video and looping is disabled, don't advance
-          if (!loopEnabled && currentIndex >= videos.length - 1) {
-            console.log("Reached end of playlist and looping is disabled");
-            return;
-          }
-          goToNextVideo();
-        }, 500); // Small delay before switching
-      }
+      console.log("Video ended, advancing to next video");
+      // Move to next video when current one ends with a small delay
+      timer = setTimeout(() => {
+        // If we're at the last video and looping is disabled, don't advance
+        if (!loopEnabled && currentIndex >= videos.length - 1) {
+          console.log("Reached end of playlist and looping is disabled");
+          setIsPlaying(false); // Stop playing when reaching the end without loop
+          return;
+        }
+        goToNextVideo();
+        setIsPlaying(true); // Ensure the next video starts playing
+      }, 300); // Small delay before switching
     };
 
     // Subscribe to message events from YouTube iframe API
@@ -88,9 +118,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
             handleVideoEnd();
           }
           // Video error (state=-1)
-          if (event.data.info === -1) {
+          else if (event.data.info === -1) {
             console.log("YouTube video error detected, skipping to next");
             goToNextVideo();
+          }
+          // Video is playing (state=1)
+          else if (event.data.info === 1) {
+            setIsPlaying(true);
+          }
+          // Video is paused (state=2)
+          else if (event.data.info === 2) {
+            setIsPlaying(false);
           }
         }
       } catch (error) {
@@ -119,29 +157,42 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     }
   }, [videos, currentIndex, autoPlay]);
 
-  const toggleFullscreen = () => {
+  // Improved fullscreen handling
+  const enterFullscreen = () => {
     if (!playerContainerRef.current) return;
 
     try {
-      if (!isFullscreen) {
-        if (playerContainerRef.current.requestFullscreen) {
-          playerContainerRef.current.requestFullscreen();
-        } else if ((playerContainerRef.current as any).webkitRequestFullscreen) {
-          (playerContainerRef.current as any).webkitRequestFullscreen();
-        } else if ((playerContainerRef.current as any).msRequestFullscreen) {
-          (playerContainerRef.current as any).msRequestFullscreen();
-        }
-      } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        } else if ((document as any).webkitExitFullscreen) {
-          (document as any).webkitExitFullscreen();
-        } else if ((document as any).msExitFullscreen) {
-          (document as any).msExitFullscreen();
-        }
+      if (playerContainerRef.current.requestFullscreen) {
+        playerContainerRef.current.requestFullscreen();
+      } else if ((playerContainerRef.current as any).webkitRequestFullscreen) {
+        (playerContainerRef.current as any).webkitRequestFullscreen();
+      } else if ((playerContainerRef.current as any).msRequestFullscreen) {
+        (playerContainerRef.current as any).msRequestFullscreen();
       }
     } catch (error) {
       console.error("Fullscreen error:", error);
+    }
+  };
+  
+  const exitFullscreen = () => {
+    try {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      } else if ((document as any).msExitFullscreen) {
+        (document as any).msExitFullscreen();
+      }
+    } catch (error) {
+      console.error("Exit fullscreen error:", error);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
     }
   };
 
@@ -182,12 +233,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       const videoId = extractYoutubeId(currentVideo.url);
       if (!videoId) return <div>Invalid YouTube URL</div>;
       
-      // YouTube embed with parameters optimized for compatibility
-      // Using controls=0 as requested but can be set to 1 for more compatibility
+      // YouTube embed with enhanced parameters for auto-play and landscape support
       return (
         <iframe
           src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0&controls=0&playsinline=1&playlist=${videoId}`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
           className="w-full h-full absolute top-0 left-0"
         ></iframe>
@@ -207,8 +257,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     return <div>Unsupported video type</div>;
   };
 
+  // Apply style adjustments for landscape orientation
+  const landscapeStyles = inLandscape ? {
+    maxWidth: '100vw',
+    width: '100vw',
+    height: '100vh',
+    margin: '0',
+    padding: '0',
+    position: 'fixed' as 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    zIndex: 1000,
+  } : {};
+
   return (
-    <div className="relative" ref={playerContainerRef}>
+    <div 
+      className="relative" 
+      ref={playerContainerRef}
+      style={landscapeStyles}
+    >
       <div 
         ref={playerRef}
         className={`video-container ${isFullscreen ? 'fullscreen' : ''}`}

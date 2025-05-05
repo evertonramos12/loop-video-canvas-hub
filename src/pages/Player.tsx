@@ -13,6 +13,24 @@ const Player = () => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  // Handle orientation changes
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      setIsLandscape(window.orientation === 90 || window.orientation === -90);
+    };
+    
+    window.addEventListener('orientationchange', handleOrientationChange);
+    // Check initial orientation
+    if (window.orientation !== undefined) {
+      handleOrientationChange();
+    }
+    
+    return () => {
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -60,13 +78,29 @@ const Player = () => {
     );
   }
 
+  // Apply different styling when in landscape mode
+  const pageStyles = isLandscape ? {
+    padding: 0,
+    margin: 0,
+    height: '100vh',
+    width: '100vw',
+    overflow: 'hidden'
+  } : {};
+
+  const adminButtonStyles = isLandscape ? {
+    position: 'fixed' as 'fixed',
+    top: '4px',
+    right: '4px',
+    zIndex: 2000,
+  } : {};
+
   return (
-    <div className="min-h-screen bg-black relative">
+    <div className="min-h-screen bg-black relative" style={pageStyles}>
       {/* Main video player area */}
       <VideoPlayer videos={videos} autoPlay={true} />
       
       {/* Admin controls overlay */}
-      <div className="absolute top-4 right-4 z-10">
+      <div className="absolute top-4 right-4 z-10" style={adminButtonStyles}>
         <Button 
           variant="outline" 
           size="sm"
