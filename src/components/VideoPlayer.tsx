@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, VideoType } from '@/types';
-import { Fullscreen, Play, Pause, SkipForward, SkipBack, Repeat, RepeatOff } from 'lucide-react';
+import { Fullscreen, Play, Pause, SkipForward, SkipBack, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { extractYoutubeId } from '@/services/videoService';
 
@@ -248,10 +249,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
             variant="ghost"
             size="icon"
             onClick={toggleLooping}
-            className="text-white hover:bg-white/20"
+            className={`text-white hover:bg-white/20 ${loopEnabled ? 'bg-white/20' : ''}`}
             title={loopEnabled ? "Disable looping" : "Enable looping"}
           >
-            {loopEnabled ? <Repeat size={20} /> : <RepeatOff size={20} />}
+            <Repeat size={20} />
           </Button>
           <span className="text-white text-sm">
             {currentVideo.title} ({currentIndex + 1}/{videos.length})
