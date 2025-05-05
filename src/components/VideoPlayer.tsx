@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, VideoType } from '@/types';
 import { Fullscreen, Play, Pause, SkipForward } from 'lucide-react';
@@ -23,12 +22,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   const goToNextVideo = () => {
     if (videos.length <= 1) return;
     
-    // If we're at the end of the playlist, loop back to the beginning
-    if (currentIndex >= videos.length - 1) {
-      setCurrentIndex(0);
-    } else {
-      setCurrentIndex(currentIndex + 1);
-    }
+    // Always loop back to beginning when we reach the end
+    setCurrentIndex((prevIndex) => (prevIndex + 1) % videos.length);
+    console.log(`Moving to next video: ${(currentIndex + 1) % videos.length + 1}/${videos.length}`);
   };
 
   useEffect(() => {
@@ -126,7 +122,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       // YouTube embed with autoplay, controls, and enablejsapi for event handling
       return (
         <iframe
-          src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0`}
+          src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0&playlist=${videoId}`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           className="w-full h-full absolute top-0 left-0"
