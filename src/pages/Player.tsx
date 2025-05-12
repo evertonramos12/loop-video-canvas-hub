@@ -7,6 +7,7 @@ import VideoPlayer from '@/components/VideoPlayer';
 import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const Player = () => {
   const { currentUser } = useAuth();
@@ -14,6 +15,7 @@ const Player = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLandscape, setIsLandscape] = useState(false);
+  const isMobile = useIsMobile();
 
   // Auto-rotate to landscape and handle orientation changes
   useEffect(() => {
@@ -25,13 +27,13 @@ const Player = () => {
     // Try to force landscape orientation if supported
     const requestLandscapeMode = () => {
       try {
-        if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape')
+        if (screen.orientation && 'lock' in screen.orientation) {
+          (screen.orientation.lock as Function)('portrait')
             .then(() => {
-              console.log('Screen locked to landscape mode');
-              setIsLandscape(true);
+              console.log('Screen locked to portrait mode');
+              setIsLandscape(false);
             })
-            .catch(err => {
+            .catch((err: Error) => {
               console.warn('Failed to lock orientation:', err);
             });
         }
@@ -45,7 +47,7 @@ const Player = () => {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     };
     
-    // If on mobile device, request landscape mode
+    // If on mobile device, request portrait mode
     if (isMobileDevice()) {
       requestLandscapeMode();
     }
@@ -60,8 +62,8 @@ const Player = () => {
       window.removeEventListener('orientationchange', handleOrientationChange);
       // Release orientation lock when component unmounts
       try {
-        if (screen.orientation && screen.orientation.unlock) {
-          screen.orientation.unlock();
+        if (screen.orientation && 'unlock' in screen.orientation) {
+          (screen.orientation.unlock as Function)();
         }
       } catch (e) {
         console.warn('Error unlocking orientation:', e);
@@ -115,8 +117,8 @@ const Player = () => {
     );
   }
 
-  // Apply different styling when in landscape mode
-  const pageStyles = isLandscape ? {
+  // Apply different styling for portrait mode
+  const pageStyles = {
     padding: 0,
     margin: 0,
     height: '100vh',
@@ -129,14 +131,14 @@ const Player = () => {
     bottom: 0,
     backgroundColor: 'black',
     zIndex: 9999,
-  } : {};
+  };
 
-  const adminButtonStyles = isLandscape ? {
+  const adminButtonStyles = {
     position: 'fixed' as 'fixed',
     top: '4px',
     right: '4px',
     zIndex: 10000,
-  } : {};
+  };
 
   return (
     <div className="min-h-screen bg-black relative" style={pageStyles}>

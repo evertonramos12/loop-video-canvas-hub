@@ -15,7 +15,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loopEnabled, setLoopEnabled] = useState(true);
-  const [inLandscape, setInLandscape] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(true);
   const playerRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -29,24 +29,26 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     [VideoType.CANVA]: 30, // 30 seconds for Canva presentations
   };
 
-  // Force landscape orientation and fullscreen on mobile
+  // Force portrait orientation and fullscreen on mobile
   useEffect(() => {
-    // Request fullscreen and landscape immediately
-    const enterFullscreenAndLandscape = () => {
+    // Request fullscreen and portrait immediately
+    const enterFullscreenAndPortrait = () => {
       if (playerContainerRef.current && !isFullscreen) {
-        // Try to lock orientation to landscape if supported
+        // Try to lock orientation to portrait if supported
         try {
-          if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('landscape').then(() => {
-              console.log('Screen locked to landscape');
-              setInLandscape(true);
-              // Then enter fullscreen
-              enterFullscreen();
-            }).catch(err => {
-              console.warn('Failed to lock orientation:', err);
-              // Still try fullscreen even if orientation lock fails
-              enterFullscreen();
-            });
+          if (screen.orientation && 'lock' in screen.orientation) {
+            (screen.orientation.lock as Function)('portrait')
+              .then(() => {
+                console.log('Screen locked to portrait mode');
+                setIsPortrait(true);
+                // Then enter fullscreen
+                enterFullscreen();
+              })
+              .catch(err => {
+                console.warn('Failed to lock orientation:', err);
+                // Still try fullscreen even if orientation lock fails
+                enterFullscreen();
+              });
           } else {
             // Fallback for browsers without orientation API
             enterFullscreen();
@@ -58,20 +60,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       }
     };
     
-    // Auto-trigger fullscreen and landscape on component mount
+    // Auto-trigger fullscreen and portrait on component mount
     if (videos.length > 0) {
-      enterFullscreenAndLandscape();
+      enterFullscreenAndPortrait();
     }
     
     // Check and handle orientation changes
     const handleOrientationChange = () => {
       const isLandscape = window.orientation === 90 || window.orientation === -90;
-      setInLandscape(isLandscape);
-      
-      // Auto enter fullscreen in landscape mode on mobile devices
-      if (isLandscape && !isFullscreen && isMobileDevice()) {
-        enterFullscreen();
-      }
+      setIsPortrait(!isLandscape);
     };
     
     // Check if device is mobile
@@ -164,14 +161,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       videoTimerRef.current = null;
     }
     
-    // If we're at the last video and looping is disabled, don't advance
-    if (!loopEnabled && currentIndex >= videos.length - 1) {
-      console.log("Reached end of playlist and looping is disabled");
-      setIsPlaying(false); // Stop playing when reaching the end without loop
-      return;
-    }
-    
-    // Advance to next video with a small delay
+    // Always loop through the playlist
     setTimeout(() => {
       goToNextVideo();
       setIsPlaying(true); // Ensure the next video starts playing
@@ -183,21 +173,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     if (videos.length <= 1) return;
     
     setCurrentIndex((prevIndex) => {
-      // If looping is disabled and we're at the end, don't advance
-      if (!loopEnabled && prevIndex >= videos.length - 1) {
-        return prevIndex;
-      }
-      // Otherwise, loop back to beginning when we reach the end
+      // Always loop back to beginning when we reach the end
       const newIndex = (prevIndex + 1) % videos.length;
       console.log(`Moving to next video: ${newIndex + 1}/${videos.length}`);
       return newIndex;
     });
   };
 
-  // Toggle looping on/off
+  // Toggle looping on/off (even though we'll always loop)
   const toggleLooping = () => {
-    setLoopEnabled(!loopEnabled);
-    console.log(`Looping ${!loopEnabled ? 'enabled' : 'disabled'}`);
+    setLoopEnabled(true); // Always keep looping enabled
+    console.log("Looping is always enabled");
   };
 
   // Enhanced auto-play feature 
@@ -339,7 +325,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       const videoId = extractYoutubeId(currentVideo.url);
       if (!videoId) return <div>Invalid YouTube URL</div>;
       
-      // YouTube embed with enhanced parameters for auto-play and landscape support
+      // YouTube embed with enhanced parameters for auto-play and portrait support
       return (
         <iframe
           src={`https://www.youtube.com/embed/${videoId}?autoplay=${isPlaying ? 1 : 0}&enablejsapi=1&modestbranding=1&rel=0&loop=0&controls=0&playsinline=1&playlist=${videoId}`}
@@ -363,8 +349,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     return <div>Unsupported video type</div>;
   };
 
-  // Apply style adjustments for landscape orientation
-  const landscapeStyles = inLandscape || isFullscreen ? {
+  // Apply style adjustments for portrait orientation
+  const portraitStyles = isPortrait || isFullscreen ? {
     maxWidth: '100vw',
     width: '100vw',
     height: '100vh',
@@ -382,12 +368,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     <div 
       className="relative" 
       ref={playerContainerRef}
-      style={landscapeStyles}
+      style={portraitStyles}
     >
       <div 
         ref={playerRef}
         className={`video-container ${isFullscreen ? 'fullscreen' : ''}`}
-        style={{position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden'}}
+        style={{
+          position: 'relative', 
+          height: '100vh',
+          overflow: 'hidden'
+        }}
       >
         {renderVideo()}
       </div>
@@ -419,15 +409,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
             title="Next video"
           >
             <SkipForward size={20} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleLooping}
-            className={`text-white hover:bg-white/20 ${loopEnabled ? 'bg-white/20' : ''}`}
-            title={loopEnabled ? "Disable looping" : "Enable looping"}
-          >
-            <Repeat size={20} />
           </Button>
           <div className="flex flex-col">
             <span className="text-white text-sm">
