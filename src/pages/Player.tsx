@@ -15,11 +15,40 @@ const Player = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLandscape, setIsLandscape] = useState(false);
 
-  // Handle orientation changes
+  // Auto-rotate to landscape and handle orientation changes
   useEffect(() => {
     const handleOrientationChange = () => {
-      setIsLandscape(window.orientation === 90 || window.orientation === -90);
+      const isLandscape = window.orientation === 90 || window.orientation === -90;
+      setIsLandscape(isLandscape);
     };
+    
+    // Try to force landscape orientation if supported
+    const requestLandscapeMode = () => {
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape')
+            .then(() => {
+              console.log('Screen locked to landscape mode');
+              setIsLandscape(true);
+            })
+            .catch(err => {
+              console.warn('Failed to lock orientation:', err);
+            });
+        }
+      } catch (err) {
+        console.warn('Orientation API error:', err);
+      }
+    };
+    
+    // Check if device is mobile
+    const isMobileDevice = () => {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    };
+    
+    // If on mobile device, request landscape mode
+    if (isMobileDevice()) {
+      requestLandscapeMode();
+    }
     
     window.addEventListener('orientationchange', handleOrientationChange);
     // Check initial orientation
@@ -29,6 +58,14 @@ const Player = () => {
     
     return () => {
       window.removeEventListener('orientationchange', handleOrientationChange);
+      // Release orientation lock when component unmounts
+      try {
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      } catch (e) {
+        console.warn('Error unlocking orientation:', e);
+      }
     };
   }, []);
 
@@ -84,14 +121,21 @@ const Player = () => {
     margin: 0,
     height: '100vh',
     width: '100vw',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    position: 'fixed' as 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'black',
+    zIndex: 9999,
   } : {};
 
   const adminButtonStyles = isLandscape ? {
     position: 'fixed' as 'fixed',
     top: '4px',
     right: '4px',
-    zIndex: 2000,
+    zIndex: 10000,
   } : {};
 
   return (

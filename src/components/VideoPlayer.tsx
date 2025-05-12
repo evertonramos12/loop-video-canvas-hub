@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Video, VideoType } from '@/types';
 import { Fullscreen, Play, Pause, SkipForward, SkipBack, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { extractYoutubeId } from '@/services/videoService';
+import { extractYoutubeId, extractCanvaId } from '@/services/videoService';
 
 interface VideoPlayerProps {
   videos: Video[];
@@ -18,11 +18,52 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   const [inLandscape, setInLandscape] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+  const videoTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [remainingTime, setRemainingTime] = useState<number>(30); // Default 30 seconds per video
   
   const currentVideo = videos[currentIndex];
 
-  // Check and handle orientation changes
+  // Video time limits based on type (in seconds)
+  const VIDEO_TIME_LIMITS = {
+    [VideoType.YOUTUBE]: 0, // For YouTube we rely on events instead of timer
+    [VideoType.CANVA]: 30, // 30 seconds for Canva presentations
+  };
+
+  // Force landscape orientation and fullscreen on mobile
   useEffect(() => {
+    // Request fullscreen and landscape immediately
+    const enterFullscreenAndLandscape = () => {
+      if (playerContainerRef.current && !isFullscreen) {
+        // Try to lock orientation to landscape if supported
+        try {
+          if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').then(() => {
+              console.log('Screen locked to landscape');
+              setInLandscape(true);
+              // Then enter fullscreen
+              enterFullscreen();
+            }).catch(err => {
+              console.warn('Failed to lock orientation:', err);
+              // Still try fullscreen even if orientation lock fails
+              enterFullscreen();
+            });
+          } else {
+            // Fallback for browsers without orientation API
+            enterFullscreen();
+          }
+        } catch (err) {
+          console.warn('Orientation API error:', err);
+          enterFullscreen();
+        }
+      }
+    };
+    
+    // Auto-trigger fullscreen and landscape on component mount
+    if (videos.length > 0) {
+      enterFullscreenAndLandscape();
+    }
+    
+    // Check and handle orientation changes
     const handleOrientationChange = () => {
       const isLandscape = window.orientation === 90 || window.orientation === -90;
       setInLandscape(isLandscape);
@@ -46,8 +87,62 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     
     return () => {
       window.removeEventListener('orientationchange', handleOrientationChange);
+      // Clear any active timers on unmount
+      if (videoTimerRef.current) {
+        clearTimeout(videoTimerRef.current);
+      }
     };
-  }, [isFullscreen]);
+  }, [videos.length, isFullscreen]);
+
+  // Initialize timer when current video changes
+  useEffect(() => {
+    if (!currentVideo) return;
+
+    // Start timer for non-YouTube videos or as fallback
+    const startVideoTimer = () => {
+      // Clear any existing timer
+      if (videoTimerRef.current) {
+        clearTimeout(videoTimerRef.current);
+      }
+      
+      // Get time limit based on video type, default to 30 seconds
+      const timeLimit = VIDEO_TIME_LIMITS[currentVideo.type] || 30;
+      setRemainingTime(timeLimit);
+      
+      // Only set timer for Canva or if needed as fallback
+      if (currentVideo.type === VideoType.CANVA || timeLimit > 0) {
+        console.log(`Setting timer for ${timeLimit} seconds for video type: ${currentVideo.type}`);
+        
+        // Set countdown timer that ticks every second
+        const intervalId = setInterval(() => {
+          setRemainingTime(prev => {
+            const newTime = prev - 1;
+            if (newTime <= 0) {
+              clearInterval(intervalId);
+              handleVideoEnd();
+              return 0;
+            }
+            return newTime;
+          });
+        }, 1000);
+        
+        // Store interval ID for cleanup
+        videoTimerRef.current = intervalId as unknown as NodeJS.Timeout;
+      }
+    };
+
+    // Start timer if video is playing
+    if (isPlaying) {
+      startVideoTimer();
+    }
+
+    return () => {
+      // Clean up timer on video change
+      if (videoTimerRef.current) {
+        clearTimeout(videoTimerRef.current);
+      }
+    };
+  }, [currentVideo, currentIndex, isPlaying]);
 
   // Function to go to previous video
   const goToPreviousVideo = () => {
@@ -58,6 +153,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       console.log(`Moving to previous video: ${newIndex + 1}/${videos.length}`);
       return newIndex;
     });
+  };
+
+  // Function to handle video ending
+  const handleVideoEnd = () => {
+    console.log("Video ended, advancing to next video");
+    // Clear any existing timer
+    if (videoTimerRef.current) {
+      clearTimeout(videoTimerRef.current);
+      videoTimerRef.current = null;
+    }
+    
+    // If we're at the last video and looping is disabled, don't advance
+    if (!loopEnabled && currentIndex >= videos.length - 1) {
+      console.log("Reached end of playlist and looping is disabled");
+      setIsPlaying(false); // Stop playing when reaching the end without loop
+      return;
+    }
+    
+    // Advance to next video with a small delay
+    setTimeout(() => {
+      goToNextVideo();
+      setIsPlaying(true); // Ensure the next video starts playing
+    }, 300);
   };
 
   // Function to advance to the next video
@@ -85,25 +203,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   // Enhanced auto-play feature 
   useEffect(() => {
     if (videos.length === 0) return;
-
-    let timer: NodeJS.Timeout;
     
-    // Handle video end and advance to next video
-    const handleVideoEnd = () => {
-      console.log("Video ended, advancing to next video");
-      // Move to next video when current one ends with a small delay
-      timer = setTimeout(() => {
-        // If we're at the last video and looping is disabled, don't advance
-        if (!loopEnabled && currentIndex >= videos.length - 1) {
-          console.log("Reached end of playlist and looping is disabled");
-          setIsPlaying(false); // Stop playing when reaching the end without loop
-          return;
-        }
-        goToNextVideo();
-        setIsPlaying(true); // Ensure the next video starts playing
-      }, 300); // Small delay before switching
-    };
-
     // Subscribe to message events from YouTube iframe API
     const handleMessage = (event: MessageEvent) => {
       try {
@@ -125,6 +225,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
           // Video is playing (state=1)
           else if (event.data.info === 1) {
             setIsPlaying(true);
+            // Clear any timer - rely on YouTube events instead
+            if (currentVideo?.type === VideoType.YOUTUBE && videoTimerRef.current) {
+              clearTimeout(videoTimerRef.current);
+            }
           }
           // Video is paused (state=2)
           else if (event.data.info === 2) {
@@ -139,7 +243,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
     window.addEventListener('message', handleMessage);
 
     return () => {
-      clearTimeout(timer);
       window.removeEventListener('message', handleMessage);
     };
   }, [currentIndex, videos, isPlaying, loopEnabled]);
@@ -169,6 +272,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       } else if ((playerContainerRef.current as any).msRequestFullscreen) {
         (playerContainerRef.current as any).msRequestFullscreen();
       }
+      setIsFullscreen(true);
     } catch (error) {
       console.error("Fullscreen error:", error);
     }
@@ -183,6 +287,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
       } else if ((document as any).msExitFullscreen) {
         (document as any).msExitFullscreen();
       }
+      setIsFullscreen(false);
     } catch (error) {
       console.error("Exit fullscreen error:", error);
     }
@@ -198,11 +303,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(
-        !!document.fullscreenElement || 
-        !!(document as any).webkitFullscreenElement || 
-        !!(document as any).msFullscreenElement
-      );
+      const fullscreenElement = 
+        document.fullscreenElement || 
+        (document as any).webkitFullscreenElement || 
+        (document as any).msFullscreenElement;
+        
+      setIsFullscreen(!!fullscreenElement);
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -258,7 +364,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
   };
 
   // Apply style adjustments for landscape orientation
-  const landscapeStyles = inLandscape ? {
+  const landscapeStyles = inLandscape || isFullscreen ? {
     maxWidth: '100vw',
     width: '100vw',
     height: '100vh',
@@ -323,9 +429,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, autoPlay = true }) =>
           >
             <Repeat size={20} />
           </Button>
-          <span className="text-white text-sm">
-            {currentVideo.title} ({currentIndex + 1}/{videos.length})
-          </span>
+          <div className="flex flex-col">
+            <span className="text-white text-sm">
+              {currentVideo.title} ({currentIndex + 1}/{videos.length})
+            </span>
+            {currentVideo.type === VideoType.CANVA && (
+              <span className="text-white/60 text-xs">
+                Next in: {remainingTime}s
+              </span>
+            )}
+          </div>
         </div>
         
         <Button
