@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Video } from '@/types';
@@ -28,10 +27,10 @@ const Player = () => {
     const requestLandscapeMode = () => {
       try {
         if (screen.orientation && 'lock' in screen.orientation) {
-          (screen.orientation.lock as Function)('portrait')
+          (screen.orientation.lock as Function)('landscape')
             .then(() => {
-              console.log('Screen locked to portrait mode');
-              setIsLandscape(false);
+              console.log('Screen locked to landscape mode');
+              setIsLandscape(true);
             })
             .catch((err: Error) => {
               console.warn('Failed to lock orientation:', err);
@@ -47,7 +46,7 @@ const Player = () => {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     };
     
-    // If on mobile device, request portrait mode
+    // If on mobile device, request landscape mode
     if (isMobileDevice()) {
       requestLandscapeMode();
     }
@@ -117,7 +116,7 @@ const Player = () => {
     );
   }
 
-  // Apply different styling for portrait mode
+  // Apply different styling for landscape mode
   const pageStyles = {
     padding: 0,
     margin: 0,
