@@ -24,7 +24,8 @@ import VideoList from '@/components/VideoList';
 import VideoForm from '@/components/VideoForm';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
-import { LogOut, Play, Plus, Settings } from 'lucide-react';
+import { AlertCircle, LogOut, Play, Plus, Settings, Info } from 'lucide-react';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Dashboard = () => {
   const { currentUser, logout } = useAuth();
@@ -34,6 +35,7 @@ const Dashboard = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [currentVideo, setCurrentVideo] = useState<Video | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -41,13 +43,18 @@ const Dashboard = () => {
     const loadVideos = async () => {
       try {
         setLoading(true);
+        setError(null);
         const userVideos = await getUserVideos(currentUser.uid);
         setVideos(userVideos);
       } catch (error: any) {
         console.error('Error loading videos:', error);
+        
+        // Set error message
         if (error.code === 'permission-denied' || error.message?.includes('permission')) {
-          toast.error('Firebase permissions error: You may need to update database rules');
+          setError('Firebase permissions error: You may need to update database rules in Firebase Console');
+          toast.error('Firebase permissions error: Update database rules');
         } else {
+          setError('Failed to load videos: ' + (error.message || 'Unknown error'));
           toast.error('Failed to load videos');
         }
       } finally {
@@ -86,9 +93,9 @@ const Dashboard = () => {
     } catch (error: any) {
       console.error('Error deleting video:', error);
       if (error.code === 'permission-denied' || error.message?.includes('permission')) {
-        toast.error('Firebase permissions error: You may need to update database rules');
+        toast.error('Firebase permissions error: Update database rules in Firebase Console');
       } else {
-        toast.error('Failed to delete video');
+        toast.error('Failed to delete video: ' + (error.message || 'Unknown error'));
       }
     } finally {
       setDeleteDialogOpen(false);
@@ -101,6 +108,7 @@ const Dashboard = () => {
     
     try {
       setFormSubmitting(true);
+      setError(null);
       
       if (currentVideo) {
         // Update existing video
@@ -128,8 +136,11 @@ const Dashboard = () => {
     } catch (error: any) {
       console.error('Error saving video:', error);
       
+      // Show detailed error message
       if (error.code === 'permission-denied' || error.message?.includes('permission')) {
-        toast.error('Firebase permissions error: You may need to update database rules in Firebase Console');
+        toast.error('Firebase permissions error: Update database rules in Firebase Console');
+      } else if (error.message) {
+        toast.error(error.message);
       } else {
         toast.error('Failed to save video');
       }
@@ -190,6 +201,36 @@ const Dashboard = () => {
             <Plus size={16} className="mr-1" /> Add Video
           </Button>
         </div>
+        
+        {/* Firebase permissions error alert */}
+        {error && error.includes('permissions') && (
+          <Alert variant="destructive" className="mb-6 border-red-900 bg-red-950/50">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {error}. Make sure your Firestore rules allow writing to the videos collection.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Suggested Firebase rules */}
+        {error && error.includes('permissions') && (
+          <Alert variant="default" className="mb-6 bg-gray-800 border-gray-700">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="space-y-2">
+              <p>Try updating your Firestore rules to:</p>
+              <pre className="bg-gray-900 p-2 rounded text-xs overflow-x-auto">
+                {`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /videos/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`}
+              </pre>
+            </AlertDescription>
+          </Alert>
+        )}
         
         {loading ? (
           <div className="flex justify-center items-center h-64">

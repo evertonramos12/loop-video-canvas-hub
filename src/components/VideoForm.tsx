@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { VideoFormData, VideoType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from "sonner";
 import { isValidVideoUrl, extractYoutubeId, extractCanvaId } from '@/services/videoService';
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check, Info } from 'lucide-react';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface VideoFormProps {
   initialData?: Partial<VideoFormData>;
@@ -28,11 +29,20 @@ const VideoForm: React.FC<VideoFormProps> = ({
     type: initialData?.type || VideoType.YOUTUBE,
   });
   const [urlValidated, setUrlValidated] = useState<boolean | null>(null);
+  const [autoValidate, setAutoValidate] = useState(false);
+
+  // Auto-validate URL when it changes if autoValidate is enabled
+  useEffect(() => {
+    if (autoValidate && formData.url) {
+      const valid = isValidVideoUrl(formData.url, formData.type);
+      setUrlValidated(valid);
+    }
+  }, [formData.url, formData.type, autoValidate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    if (name === 'url') {
+    if (name === 'url' && !autoValidate) {
       // Reset validation state when URL changes
       setUrlValidated(null);
     }
@@ -49,6 +59,7 @@ const VideoForm: React.FC<VideoFormProps> = ({
   const validateUrl = () => {
     if (!formData.url.trim()) {
       setUrlValidated(false);
+      toast.error('Please enter a URL');
       return;
     }
     
@@ -63,6 +74,7 @@ const VideoForm: React.FC<VideoFormProps> = ({
       );
     } else {
       toast.success('URL format is valid');
+      setAutoValidate(true);
     }
   };
 
@@ -79,7 +91,9 @@ const VideoForm: React.FC<VideoFormProps> = ({
       return;
     }
     
+    // Validate URL before submission
     if (!isValidVideoUrl(formData.url, formData.type)) {
+      setUrlValidated(false);
       toast.error(
         formData.type === VideoType.YOUTUBE 
         ? 'Invalid YouTube URL format. Example: https://www.youtube.com/watch?v=abcdefghijk'
@@ -88,7 +102,12 @@ const VideoForm: React.FC<VideoFormProps> = ({
       return;
     }
     
-    await onSubmit(formData);
+    try {
+      await onSubmit(formData);
+    } catch (error: any) {
+      console.error('Form submission error:', error);
+      toast.error(`Error: ${error.message || 'Unknown error occurred'}`);
+    }
   };
 
   // Parse ID for display purposes
@@ -223,6 +242,13 @@ const VideoForm: React.FC<VideoFormProps> = ({
           )}
         </div>
       </div>
+
+      <Alert variant="default" className="bg-gray-800 border-gray-700 text-gray-300">
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          If you're having trouble saving videos, ensure you've correctly set up your Firebase security rules to allow write operations.
+        </AlertDescription>
+      </Alert>
       
       <div className="flex justify-end space-x-2">
         <Button 

@@ -1,3 +1,4 @@
+
 import { db } from '@/lib/firebase';
 import { Video, VideoFormData, VideoType } from '@/types';
 import { 
@@ -17,6 +18,11 @@ export const addVideo = async (userId: string, videoData: VideoFormData): Promis
   try {
     console.log('Adding video for user:', userId);
     
+    // Validate the URL format before attempting to save
+    if (!isValidVideoUrl(videoData.url, videoData.type)) {
+      throw new Error(`Invalid ${videoData.type} URL format. Please check and try again.`);
+    }
+    
     const video: Omit<Video, 'id'> = {
       ...videoData,
       userId,
@@ -34,7 +40,7 @@ export const addVideo = async (userId: string, videoData: VideoFormData): Promis
     
     // Provide more specific error messages
     if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Firebase rules may need to be updated. Please check your Firebase console.');
+      throw new Error('Permission denied. Firebase rules may need to be updated. Please check your Firebase console and ensure read/write rules are properly set for videos collection.');
     }
     
     throw error;
@@ -74,6 +80,7 @@ export const getUserVideos = async (userId: string): Promise<Video[]> => {
     
     if (error.code === 'permission-denied') {
       console.error('Firebase permission denied error. Check security rules.');
+      throw new Error('Permission denied. Please check your Firebase security rules for the videos collection.');
     }
     
     throw error;
@@ -82,6 +89,11 @@ export const getUserVideos = async (userId: string): Promise<Video[]> => {
 
 export const updateVideo = async (videoId: string, videoData: Partial<VideoFormData>): Promise<void> => {
   try {
+    // Validate URL if it's being updated
+    if (videoData.url && videoData.type && !isValidVideoUrl(videoData.url, videoData.type)) {
+      throw new Error(`Invalid ${videoData.type} URL format. Please check and try again.`);
+    }
+    
     const videoRef = doc(db, videosCollection, videoId);
     await updateDoc(videoRef, videoData);
   } catch (error) {
@@ -106,18 +118,25 @@ export const extractYoutubeId = (url: string): string | null => {
 };
 
 export const extractCanvaId = (url: string): string | null => {
-  // Example Canva URL: https://www.canva.com/design/DAFxyz123/view
-  const regExp = /\/design\/([^\/]+)\/(?:view|present|share)/;
+  // Improved regex to handle different URL formats including truncated ones
+  const regExp = /\/design\/([A-Za-z0-9_-]+)(\/|$)/;
   const match = url.match(regExp);
   return match ? match[1] : null;
 };
 
 export const isValidVideoUrl = (url: string, type: VideoType): boolean => {
+  if (!url || url.trim() === '') {
+    return false;
+  }
+  
   if (type === VideoType.YOUTUBE) {
     return extractYoutubeId(url) !== null;
   }
+  
   if (type === VideoType.CANVA) {
-    return url.includes('canva.com/design/');
+    // More lenient check for Canva URLs
+    return url.includes('canva.com/design/') && extractCanvaId(url) !== null;
   }
+  
   return false;
 };
