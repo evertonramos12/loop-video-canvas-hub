@@ -43,9 +43,13 @@ const Dashboard = () => {
         setLoading(true);
         const userVideos = await getUserVideos(currentUser.uid);
         setVideos(userVideos);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error loading videos:', error);
-        toast.error('Failed to load videos');
+        if (error.code === 'permission-denied' || error.message?.includes('permission')) {
+          toast.error('Firebase permissions error: You may need to update database rules');
+        } else {
+          toast.error('Failed to load videos');
+        }
       } finally {
         setLoading(false);
       }
@@ -79,8 +83,13 @@ const Dashboard = () => {
       await deleteVideo(currentVideo.id);
       setVideos(videos.filter(v => v.id !== currentVideo.id));
       toast.success('Video deleted successfully');
-    } catch (error) {
-      toast.error('Failed to delete video');
+    } catch (error: any) {
+      console.error('Error deleting video:', error);
+      if (error.code === 'permission-denied' || error.message?.includes('permission')) {
+        toast.error('Firebase permissions error: You may need to update database rules');
+      } else {
+        toast.error('Failed to delete video');
+      }
     } finally {
       setDeleteDialogOpen(false);
       setCurrentVideo(null);
@@ -116,9 +125,14 @@ const Dashboard = () => {
       }
       
       setFormDialogOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving video:', error);
-      toast.error('Failed to save video');
+      
+      if (error.code === 'permission-denied' || error.message?.includes('permission')) {
+        toast.error('Firebase permissions error: You may need to update database rules in Firebase Console');
+      } else {
+        toast.error('Failed to save video');
+      }
     } finally {
       setFormSubmitting(false);
     }

@@ -1,4 +1,3 @@
-
 import { db } from '@/lib/firebase';
 import { Video, VideoFormData, VideoType } from '@/types';
 import { 
@@ -16,22 +15,36 @@ const videosCollection = 'videos';
 
 export const addVideo = async (userId: string, videoData: VideoFormData): Promise<string> => {
   try {
+    console.log('Adding video for user:', userId);
+    
     const video: Omit<Video, 'id'> = {
       ...videoData,
       userId,
       createdAt: Date.now(),
     };
     
+    // For debugging purposes
+    console.log('Video data to be added:', JSON.stringify(video, null, 2));
+    
     const docRef = await addDoc(collection(db, videosCollection), video);
+    console.log('Video added successfully with ID:', docRef.id);
     return docRef.id;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding video:', error);
+    
+    // Provide more specific error messages
+    if (error.code === 'permission-denied') {
+      throw new Error('Permission denied. Firebase rules may need to be updated. Please check your Firebase console.');
+    }
+    
     throw error;
   }
 };
 
 export const getUserVideos = async (userId: string): Promise<Video[]> => {
   try {
+    console.log('Fetching videos for user:', userId);
+    
     const q = query(
       collection(db, videosCollection),
       where('userId', '==', userId)
@@ -52,10 +65,17 @@ export const getUserVideos = async (userId: string): Promise<Video[]> => {
       });
     });
     
+    console.log(`Found ${videos.length} videos for user ${userId}`);
+    
     // Sort by creation date (newest first)
     return videos.sort((a, b) => b.createdAt - a.createdAt);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching videos:', error);
+    
+    if (error.code === 'permission-denied') {
+      console.error('Firebase permission denied error. Check security rules.');
+    }
+    
     throw error;
   }
 };
